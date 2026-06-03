@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import math
@@ -236,14 +237,30 @@ def expire_speaking_if_needed(now: float) -> SpeakState:
         )
 
 
-def run_app() -> None:
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the Daimiao PNG VTuber window.")
+    parser.add_argument(
+        "--host",
+        default=DEFAULT_HOST,
+        help=f"WebSocket bind host, default: {DEFAULT_HOST}",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_PORT,
+        help=f"WebSocket port, default: {DEFAULT_PORT}",
+    )
+    return parser.parse_args()
+
+
+def run_app(host: str, port: int) -> None:
     pygame.init()
     pygame.display.set_caption("Daimiao PNG VTuber")
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     clock = pygame.time.Clock()
     closed_image, open_image = load_character_images()
 
-    start_websocket_server(DEFAULT_HOST, DEFAULT_PORT)
+    start_websocket_server(host, port)
 
     running = True
     while running:
@@ -277,7 +294,8 @@ def run_app() -> None:
 
 if __name__ == "__main__":
     try:
-        run_app()
+        args = parse_args()
+        run_app(args.host, args.port)
     except FileNotFoundError as exc:
         print(exc)
         sys.exit(1)

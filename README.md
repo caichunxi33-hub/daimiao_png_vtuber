@@ -26,6 +26,12 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
+也可以显式指定监听地址和端口：
+
+```bash
+python main.py --host 0.0.0.0 --port 8765
+```
+
 另开一个终端发送测试消息：
 
 ```bash
@@ -55,6 +61,12 @@ python main.py
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe main.py
+```
+
+如需改端口：
+
+```powershell
+.\.venv\Scripts\python.exe main.py --host 0.0.0.0 --port 8765
 ```
 
 ## 替换 PNG 图片
@@ -113,6 +125,19 @@ Mac 侧发送 JSON 示例：
 python tools/send_test_message.py --host 192.168.1.23 --port 8765 --text "老大，醒醒，该开播了喵。" --duration 3.5
 ```
 
+推荐先用连接自检脚本确认 TCP 和 WebSocket 都通：
+
+```bash
+python tools/check_connection.py --host 192.168.1.23 --port 8765 --text "Mac 到 Windows 测试到了喵。" --duration 4
+```
+
+成功输出类似：
+
+```text
+[OK] TCP 192.168.1.23:8765: 8.0 ms
+[OK] WebSocket ws://192.168.1.23:8765: sent speak message in 20.0 ms
+```
+
 ## WebSocket 协议
 
 第一版只处理 `type=speak`：
@@ -154,5 +179,5 @@ python tools/send_test_message.py --host 192.168.1.23 --port 8765 --text "老大
 ## 检查语法
 
 ```bash
-python -m py_compile main.py tools/send_test_message.py
+python -m py_compile main.py tools/send_test_message.py tools/check_connection.py
 ```
