@@ -35,9 +35,11 @@ async def check_websocket(
     }
 
     started_at = time.perf_counter()
-    async with asyncio.timeout(timeout):
+    async def send() -> None:
         async with websockets.connect(uri) as websocket:
             await websocket.send(json.dumps(payload, ensure_ascii=False))
+
+    await asyncio.wait_for(send(), timeout=timeout)
     return (time.perf_counter() - started_at) * 1000
 
 
