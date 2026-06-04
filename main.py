@@ -20,6 +20,9 @@ WINDOW_WIDTH = 800
 WINDOW_HEIGHT = 600
 GREEN_SCREEN = (0, 255, 0)
 FPS = 60
+BUBBLE_FILL = (255, 255, 255)
+BUBBLE_OUTLINE = (24, 24, 24)
+BUBBLE_TEXT = (20, 20, 20)
 
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8765
@@ -191,8 +194,58 @@ def draw_outlined_text(
     screen.blit(fill, rect)
 
 
+def draw_speech_bubble(
+    screen: pygame.Surface,
+    font: pygame.font.Font,
+    lines: list[str],
+    character_rect: pygame.Rect,
+) -> None:
+    if not lines:
+        return
+
+    padding_x = 26
+    padding_y = 16
+    line_height = font.get_linesize()
+    text_width = max(font.size(line)[0] for line in lines)
+    text_height = line_height * len(lines)
+    bubble_width = min(max(text_width + padding_x * 2, 240), WINDOW_WIDTH - 56)
+    bubble_height = text_height + padding_y * 2
+    bubble_x = (WINDOW_WIDTH - bubble_width) // 2
+    bubble_y = max(24, character_rect.top - bubble_height - 26)
+    bubble_rect = pygame.Rect(bubble_x, bubble_y, bubble_width, bubble_height)
+
+    tail_tip = (
+        min(max(character_rect.centerx + 28, bubble_rect.left + 52), bubble_rect.right - 52),
+        min(character_rect.top + 34, WINDOW_HEIGHT - 28),
+    )
+    tail_base_y = bubble_rect.bottom - 2
+    tail_base_center_x = min(max(tail_tip[0] - 34, bubble_rect.left + 54), bubble_rect.right - 54)
+    tail_outline = [
+        (tail_base_center_x - 22, tail_base_y),
+        (tail_base_center_x + 22, tail_base_y),
+        tail_tip,
+    ]
+    tail_fill = [
+        (tail_base_center_x - 17, tail_base_y - 1),
+        (tail_base_center_x + 17, tail_base_y - 1),
+        (tail_tip[0], tail_tip[1] - 6),
+    ]
+
+    pygame.draw.polygon(screen, BUBBLE_OUTLINE, tail_outline)
+    pygame.draw.rect(screen, BUBBLE_OUTLINE, bubble_rect, border_radius=20)
+    inner_rect = bubble_rect.inflate(-6, -6)
+    pygame.draw.polygon(screen, BUBBLE_FILL, tail_fill)
+    pygame.draw.rect(screen, BUBBLE_FILL, inner_rect, border_radius=17)
+
+    text_y = bubble_rect.y + padding_y
+    for index, line in enumerate(lines):
+        rendered = font.render(line, True, BUBBLE_TEXT)
+        text_rect = rendered.get_rect(centerx=bubble_rect.centerx, y=text_y + index * line_height)
+        screen.blit(rendered, text_rect)
+
+
 def draw_subtitle(screen: pygame.Surface, text: str, character_rect: pygame.Rect) -> None:
-    max_width = int(WINDOW_WIDTH * 0.84)
+    max_width = int(WINDOW_WIDTH * 0.68)
     for size in (34, 30, 26, 22):
         font = pygame.font.SysFont(
             "microsoftyahei,pingfangsc,notosanscjk,arialunicode,simsun",
@@ -203,11 +256,7 @@ def draw_subtitle(screen: pygame.Surface, text: str, character_rect: pygame.Rect
         if len(lines) <= 2 and all(font.size(line)[0] <= max_width for line in lines):
             break
 
-    line_height = font.get_linesize()
-    total_height = line_height * len(lines)
-    y = min(character_rect.bottom + 18, WINDOW_HEIGHT - total_height - 24)
-    for index, line in enumerate(lines):
-        draw_outlined_text(screen, font, line, WINDOW_WIDTH // 2, y + index * line_height)
+    draw_speech_bubble(screen, font, lines, character_rect)
 
 
 def snapshot_state() -> SpeakState:

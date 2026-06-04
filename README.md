@@ -10,7 +10,7 @@
 - 纯绿色背景 `#00FF00`
 - 默认显示 `assets/daimiao_closed.png`
 - 收到 `speak` WebSocket 事件后切换 `closed/open` 两张图模拟张嘴
-- 字幕显示在角色下方，白字黑描边，最多 2 行
+- 说话时显示白底黑边对话气泡，最多 2 行
 - 待机时有轻微上下浮动
 - 新 `speak` 消息会覆盖当前说话内容，不排队
 
@@ -90,6 +90,8 @@ python main.py
 
 ## 从 Mac 的 AI_assistant 发送消息到 Windows
 
+注意：`AI_assistant` 已经实现 PNG VTuber WebSocket sender。发送端代码在 `AI_assistant/vtuber_ws_client.py`，并由 `daimiao_master_v9_env_ready.py` 的 `enqueue_text(text)` 调用；不要把 sender 当作 PNG 前端仓库的待办。
+
 PNG VTuber 默认在 Windows PC 上监听：
 
 ```text
@@ -168,9 +170,9 @@ python tools/check_connection.py --host 192.168.1.23 --port 8765 --text "Mac 到
 
 运行命令时请在 `daimiao_png_vtuber` 项目目录内执行 `python main.py`。
 
-### 字幕太长
+### 对话气泡文字太长
 
-字幕最多显示 2 行。过长文本会自动缩小字号并截断。建议从 AI_assistant 侧控制单次吐槽长度，让直播画面更干净。
+对话气泡最多显示 2 行。过长文本会自动缩小字号并截断。建议从 AI_assistant 侧控制单次吐槽长度，让直播画面更干净。
 
 ### 绿幕抠图边缘异常
 
