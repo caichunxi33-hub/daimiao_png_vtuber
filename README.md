@@ -8,8 +8,9 @@
 
 - 固定 800x600 pygame 窗口
 - 纯绿色背景 `#00FF00`
-- 默认显示 `assets/daimiao_closed.png`
+- 默认显示 `assets/neutral_closed.png`
 - 收到 `speak` WebSocket 事件后切换 `closed/open` 两张图模拟张嘴
+- 根据 `mood` 字段切换不同情绪图组
 - 说话时显示白底黑边对话气泡，最多 2 行
 - 待机时有轻微上下浮动
 - 新 `speak` 消息会覆盖当前说话内容，不排队
@@ -69,14 +70,24 @@ python main.py
 .\.venv\Scripts\python.exe main.py --host 0.0.0.0 --port 8765
 ```
 
-## 替换 PNG 图片
+## 替换 / 新增 PNG 图片
 
-替换以下两个文件即可：
+每个情绪图组使用一对文件：
 
-- `assets/daimiao_closed.png`：闭嘴/待机图
-- `assets/daimiao_open.png`：张嘴图
+- `assets/<mood>_closed.png`：闭嘴/待机图
+- `assets/<mood>_open.png`：张嘴图
 
-建议使用透明背景 PNG。程序会自动按窗口尺寸缩放过大的图片。文件名必须保持不变，否则会提示找不到图片。
+当前内置情绪图组：
+
+- `neutral`
+- `happy`
+- `annoyed`
+- `surprised`
+- `thinking`
+
+程序启动时会自动加载 `assets/*_closed.png` 和对应的 `assets/*_open.png`。如果收到的 `mood` 匹配不到现有图组，会回退到 `neutral`；如果没有 `neutral`，会尝试旧版 `daimiao` 图组。
+
+建议使用透明背景 PNG。若图片是绿底 PNG，程序会在加载时把接近纯绿的背景转为透明，再叠到窗口的纯绿色背景上，方便抖音直播助手统一抠图。
 
 ## 抖音直播助手使用方式
 
@@ -127,6 +138,12 @@ Mac 侧发送 JSON 示例：
 python tools/send_test_message.py --host 192.168.1.23 --port 8765 --text "老大，醒醒，该开播了喵。" --duration 3.5
 ```
 
+测试指定情绪图组：
+
+```bash
+python tools/send_test_message.py --host 192.168.1.23 --port 8765 --mood happy --text "老大，这波还算有点样子喵。" --duration 3.5
+```
+
 推荐先用连接自检脚本确认 TCP 和 WebSocket 都通：
 
 ```bash
@@ -148,10 +165,12 @@ python tools/check_connection.py --host 192.168.1.23 --port 8765 --text "Mac 到
 {
   "type": "speak",
   "text": "老大，这波居然没猫车，算你有点本事喵。",
-  "mood": "嘴硬夸奖",
+  "mood": "happy",
   "duration": 4.2
 }
 ```
+
+`mood` 可以直接使用图组名，例如 `neutral`、`happy`、`annoyed`、`surprised`、`thinking`。程序也内置了部分中文 mood 映射，例如 `嘴硬夸奖` 会映射到 `happy`，`毒舌` 会映射到 `annoyed`。
 
 无效 JSON 或非法字段只会打印错误，不会导致程序崩溃。
 
@@ -163,10 +182,10 @@ python tools/check_connection.py --host 192.168.1.23 --port 8765 --text "Mac 到
 
 ### 找不到图片
 
-确认这两个文件存在：
+确认每个图组都是成对存在，例如：
 
-- `assets/daimiao_closed.png`
-- `assets/daimiao_open.png`
+- `assets/neutral_closed.png`
+- `assets/neutral_open.png`
 
 运行命令时请在 `daimiao_png_vtuber` 项目目录内执行 `python main.py`。
 

@@ -23,14 +23,46 @@ FPS = 60
 BUBBLE_FILL = (255, 255, 255)
 BUBBLE_OUTLINE = (24, 24, 24)
 BUBBLE_TEXT = (20, 20, 20)
+DEFAULT_MOOD = "neutral"
+FALLBACK_MOOD = "daimiao"
 
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8765
 
 BASE_DIR = Path(__file__).resolve().parent
 ASSETS_DIR = BASE_DIR / "assets"
-CLOSED_IMAGE_PATH = ASSETS_DIR / "daimiao_closed.png"
-OPEN_IMAGE_PATH = ASSETS_DIR / "daimiao_open.png"
+
+MOOD_ALIASES = {
+    "": DEFAULT_MOOD,
+    "neutral": DEFAULT_MOOD,
+    "default": DEFAULT_MOOD,
+    "happy": "happy",
+    "smile": "happy",
+    "annoyed": "annoyed",
+    "angry": "annoyed",
+    "surprised": "surprised",
+    "thinking": "thinking",
+    "毒舌": "annoyed",
+    "傲娇": "annoyed",
+    "慌张": "surprised",
+    "看乐子": "happy",
+    "老妈子": "annoyed",
+    "阴阳怪气": "annoyed",
+    "惊喜": "surprised",
+    "嘴硬夸奖": "happy",
+    "热血": "surprised",
+    "护短": "annoyed",
+    "欣慰": "happy",
+    "崇拜": "surprised",
+    "得意": "happy",
+    "激动": "surprised",
+}
+
+
+@dataclass(frozen=True)
+class CharacterImageSet:
+    closed: pygame.Surface
+    opened: pygame.Surface
 
 
 @dataclass
@@ -46,18 +78,46 @@ state = SpeakState()
 state_lock = threading.Lock()
 
 
-def load_character_images() -> tuple[pygame.Surface, pygame.Surface]:
-    missing = [
-        str(path)
-        for path in (CLOSED_IMAGE_PATH, OPEN_IMAGE_PATH)
-        if not path.exists()
-    ]
-    if missing:
-        raise FileNotFoundError("Missing image file(s): " + ", ".join(missing))
+def load_character_images() -> dict[str, CharacterImageSet]:
+    image_sets: dict[str, CharacterImageSet] = {}
+    missing_pairs: list[str] = []
 
-    closed = pygame.image.load(str(CLOSED_IMAGE_PATH)).convert_alpha()
-    opened = pygame.image.load(str(OPEN_IMAGE_PATH)).convert_alpha()
-    return fit_image(closed), fit_image(opened)
+    for closed_path in sorted(ASSETS_DIR.glob("*_closed.png")):
+        mood = closed_path.name[: -len("_closed.png")]
+        open_path = ASSETS_DIR / f"{mood}_open.png"
+        if not open_path.exists():
+            missing_pairs.append(str(open_path))
+            continue
+
+        closed = prepare_character_image(pygame.image.load(str(closed_path)).convert_alpha())
+        opened = prepare_character_image(pygame.image.load(str(open_path)).convert_alpha())
+        image_sets[mood] = CharacterImageSet(closed=fit_image(closed), opened=fit_image(opened))
+
+    if missing_pairs:
+        raise FileNotFoundError("Missing image file(s): " + ", ".join(missing_pairs))
+    if not image_sets:
+        raise FileNotFoundError("Missing character image pairs in assets/*_closed.png and assets/*_open.png")
+
+    print("Loaded mood image sets: " + ", ".join(sorted(image_sets)))
+    return image_sets
+
+
+def prepare_character_image(surface: pygame.Surface) -> pygame.Surface:
+    result = surface.copy()
+    if result.get_bounding_rect(min_alpha=1).size != result.get_size():
+        return result
+
+    result.lock()
+    try:
+        width, height = result.get_size()
+        for y in range(height):
+            for x in range(width):
+                red, green, blue, alpha = result.get_at((x, y))
+                if alpha and green >= 180 and red <= 90 and blue <= 90:
+                    result.set_at((x, y), (red, green, blue, 0))
+    finally:
+        result.unlock()
+    return result
 
 
 def fit_image(surface: pygame.Surface) -> pygame.Surface:
@@ -67,6 +127,22 @@ def fit_image(surface: pygame.Surface) -> pygame.Surface:
     scale = min(max_width / width, max_height / height, 1.0)
     size = (max(1, int(width * scale)), max(1, int(height * scale)))
     return pygame.transform.smoothscale(surface, size)
+
+
+def resolve_mood_key(mood: str, image_sets: dict[str, CharacterImageSet]) -> str:
+    normalized = (mood or "").strip()
+    candidates = [
+        normalized,
+        normalized.lower(),
+        MOOD_ALIASES.get(normalized, ""),
+        MOOD_ALIASES.get(normalized.lower(), ""),
+        DEFAULT_MOOD,
+        FALLBACK_MOOD,
+    ]
+    for candidate in candidates:
+        if candidate in image_sets:
+            return candidate
+    return next(iter(image_sets))
 
 
 def parse_speak_message(payload: dict[str, Any]) -> tuple[str, str, float] | None:
@@ -307,7 +383,7 @@ def run_app(host: str, port: int) -> None:
     pygame.display.set_caption("Daimiao PNG VTuber")
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     clock = pygame.time.Clock()
-    closed_image, open_image = load_character_images()
+    image_sets = load_character_images()
 
     start_websocket_server(host, port)
 
@@ -323,11 +399,13 @@ def run_app(host: str, port: int) -> None:
         screen.fill(GREEN_SCREEN)
 
         floating_y = int(math.sin(now * 2.0) * 5)
+        mood_key = resolve_mood_key(current.mood, image_sets)
+        character_images = image_sets[mood_key]
         if current.speaking:
             mouth_open = int((now - current.started_at) / 0.16) % 2 == 1
-            image = open_image if mouth_open else closed_image
+            image = character_images.opened if mouth_open else character_images.closed
         else:
-            image = closed_image
+            image = image_sets[resolve_mood_key("", image_sets)].closed
 
         character_rect = image.get_rect(center=(WINDOW_WIDTH // 2, 300 + floating_y))
         screen.blit(image, character_rect)
