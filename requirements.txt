@@ -1,2 +1,3 @@
 pygame>=2.5,<3
 websockets>=12,<16
+Pillow>=10,<13

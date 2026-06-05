@@ -13,6 +13,7 @@ from typing import Any
 
 import pygame
 import websockets
+from PIL import Image, ImageDraw, ImageFont
 from websockets.server import WebSocketServerProtocol
 
 
@@ -25,6 +26,13 @@ BUBBLE_OUTLINE = (24, 24, 24)
 BUBBLE_TEXT = (20, 20, 20)
 DEFAULT_MOOD = "neutral"
 FALLBACK_MOOD = "daimiao"
+FONT_CANDIDATES = (
+    "/System/Library/Fonts/PingFang.ttc",
+    "/System/Library/Fonts/STHeiti Light.ttc",
+    "/Library/Fonts/Arial Unicode.ttf",
+    "C:/Windows/Fonts/msyh.ttc",
+    "C:/Windows/Fonts/simhei.ttf",
+)
 
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8765
@@ -65,6 +73,12 @@ class CharacterImageSet:
     opened: pygame.Surface
 
 
+@dataclass(frozen=True)
+class BubbleFont:
+    font: ImageFont.ImageFont
+    size: int
+
+
 @dataclass
 class SpeakState:
     text: str = ""
@@ -89,8 +103,8 @@ def load_character_images() -> dict[str, CharacterImageSet]:
             missing_pairs.append(str(open_path))
             continue
 
-        closed = prepare_character_image(pygame.image.load(str(closed_path)).convert_alpha())
-        opened = prepare_character_image(pygame.image.load(str(open_path)).convert_alpha())
+        closed = prepare_character_image(load_png_surface(closed_path))
+        opened = prepare_character_image(load_png_surface(open_path))
         opened = align_visible_content(opened, closed.get_bounding_rect(min_alpha=1))
         image_sets[mood] = CharacterImageSet(closed=fit_image(closed), opened=fit_image(opened))
 
@@ -101,6 +115,11 @@ def load_character_images() -> dict[str, CharacterImageSet]:
 
     print("Loaded mood image sets: " + ", ".join(sorted(image_sets)))
     return image_sets
+
+
+def load_png_surface(path: Path) -> pygame.Surface:
+    image = Image.open(path).convert("RGBA")
+    return pygame.image.frombuffer(image.tobytes(), image.size, "RGBA").convert_alpha()
 
 
 def prepare_character_image(surface: pygame.Surface) -> pygame.Surface:
@@ -223,7 +242,7 @@ def start_websocket_server(host: str, port: int) -> threading.Thread:
 
 def wrap_subtitle(
     text: str,
-    font: pygame.font.Font,
+    font: BubbleFont,
     max_width: int,
     max_lines: int = 2,
 ) -> list[str]:
@@ -234,7 +253,7 @@ def wrap_subtitle(
 
     for word in words:
         candidate = word if not current else current + separator + word
-        if font.size(candidate)[0] <= max_width:
+        if measure_text(font, candidate)[0] <= max_width:
             current = candidate
             continue
 
@@ -250,7 +269,7 @@ def wrap_subtitle(
     if len(lines) > max_lines:
         lines = lines[:max_lines]
 
-    if lines and font.size(lines[-1])[0] > max_width:
+    if lines and measure_text(font, lines[-1])[0] > max_width:
         lines[-1] = trim_to_width(lines[-1], font, max_width)
 
     if len(lines) == max_lines and "".join(lines) != text.replace(" ", ""):
@@ -259,35 +278,42 @@ def wrap_subtitle(
     return lines
 
 
-def trim_to_width(text: str, font: pygame.font.Font, max_width: int) -> str:
+def trim_to_width(text: str, font: BubbleFont, max_width: int) -> str:
     suffix = "..."
-    while text and font.size(text + suffix)[0] > max_width:
+    while text and measure_text(font, text + suffix)[0] > max_width:
         text = text[:-1]
     return text + suffix if text else suffix
 
 
-def draw_outlined_text(
-    screen: pygame.Surface,
-    font: pygame.font.Font,
-    text: str,
-    center_x: int,
-    y: int,
-) -> None:
-    outline_color = (0, 0, 0)
-    fill_color = (255, 255, 255)
-    for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2), (-2, -2), (2, -2), (-2, 2), (2, 2)):
-        outline = font.render(text, True, outline_color)
-        rect = outline.get_rect(centerx=center_x, y=y)
-        screen.blit(outline, rect.move(dx, dy))
+def load_bubble_font(size: int) -> BubbleFont:
+    for font_path in FONT_CANDIDATES:
+        path = Path(font_path)
+        if path.exists():
+            return BubbleFont(font=ImageFont.truetype(str(path), size=size), size=size)
+    try:
+        return BubbleFont(font=ImageFont.load_default(size=size), size=size)
+    except TypeError:
+        return BubbleFont(font=ImageFont.load_default(), size=size)
 
-    fill = font.render(text, True, fill_color)
-    rect = fill.get_rect(centerx=center_x, y=y)
-    screen.blit(fill, rect)
+
+def measure_text(font: BubbleFont, text: str) -> tuple[int, int]:
+    left, top, right, bottom = font.font.getbbox(text)
+    return right - left, bottom - top
+
+
+def render_text_surface(text: str, font: BubbleFont, color: tuple[int, int, int]) -> pygame.Surface:
+    left, top, right, bottom = font.font.getbbox(text)
+    width = max(1, right - left)
+    height = max(1, bottom - top)
+    image = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw.text((-left, -top), text, font=font.font, fill=(*color, 255))
+    return pygame.image.frombuffer(image.tobytes(), image.size, "RGBA").convert_alpha()
 
 
 def draw_speech_bubble(
     screen: pygame.Surface,
-    font: pygame.font.Font,
+    font: BubbleFont,
     lines: list[str],
     character_rect: pygame.Rect,
 ) -> None:
@@ -296,8 +322,8 @@ def draw_speech_bubble(
 
     padding_x = 26
     padding_y = 16
-    line_height = font.get_linesize()
-    text_width = max(font.size(line)[0] for line in lines)
+    line_height = int(font.size * 1.22)
+    text_width = max(measure_text(font, line)[0] for line in lines)
     text_height = line_height * len(lines)
     bubble_width = min(max(text_width + padding_x * 2, 240), WINDOW_WIDTH - 56)
     bubble_height = text_height + padding_y * 2
@@ -330,7 +356,7 @@ def draw_speech_bubble(
 
     text_y = bubble_rect.y + padding_y
     for index, line in enumerate(lines):
-        rendered = font.render(line, True, BUBBLE_TEXT)
+        rendered = render_text_surface(line, font, BUBBLE_TEXT)
         text_rect = rendered.get_rect(centerx=bubble_rect.centerx, y=text_y + index * line_height)
         screen.blit(rendered, text_rect)
 
@@ -338,13 +364,9 @@ def draw_speech_bubble(
 def draw_subtitle(screen: pygame.Surface, text: str, character_rect: pygame.Rect) -> None:
     max_width = int(WINDOW_WIDTH * 0.68)
     for size in (34, 30, 26, 22):
-        font = pygame.font.SysFont(
-            "microsoftyahei,pingfangsc,notosanscjk,arialunicode,simsun",
-            size,
-            bold=True,
-        )
+        font = load_bubble_font(size)
         lines = wrap_subtitle(text, font, max_width)
-        if len(lines) <= 2 and all(font.size(line)[0] <= max_width for line in lines):
+        if len(lines) <= 2 and all(measure_text(font, line)[0] <= max_width for line in lines):
             break
 
     draw_speech_bubble(screen, font, lines, character_rect)
