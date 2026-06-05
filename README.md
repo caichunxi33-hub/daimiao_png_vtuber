@@ -11,6 +11,7 @@
 - 默认显示 `assets/neutral_closed.png`
 - 收到 `speak` WebSocket 事件后切换 `closed/open` 两张图模拟张嘴
 - 根据 `mood` 字段切换不同情绪图组
+- 同一情绪的 `open` 图会自动对齐 `closed` 图的角色边界，避免说话时视觉缩放
 - 说话时显示白底黑边对话气泡，最多 2 行
 - 待机时有轻微上下浮动
 - 新 `speak` 消息会覆盖当前说话内容，不排队

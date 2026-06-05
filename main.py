@@ -91,6 +91,7 @@ def load_character_images() -> dict[str, CharacterImageSet]:
 
         closed = prepare_character_image(pygame.image.load(str(closed_path)).convert_alpha())
         opened = prepare_character_image(pygame.image.load(str(open_path)).convert_alpha())
+        opened = align_visible_content(opened, closed.get_bounding_rect(min_alpha=1))
         image_sets[mood] = CharacterImageSet(closed=fit_image(closed), opened=fit_image(opened))
 
     if missing_pairs:
@@ -118,6 +119,20 @@ def prepare_character_image(surface: pygame.Surface) -> pygame.Surface:
     finally:
         result.unlock()
     return result
+
+
+def align_visible_content(surface: pygame.Surface, target_rect: pygame.Rect) -> pygame.Surface:
+    source_rect = surface.get_bounding_rect(min_alpha=1)
+    if not source_rect.width or not source_rect.height or not target_rect.width or not target_rect.height:
+        return surface
+
+    content = pygame.Surface(source_rect.size, pygame.SRCALPHA)
+    content.blit(surface, (0, 0), source_rect)
+    content = pygame.transform.smoothscale(content, target_rect.size)
+
+    aligned = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+    aligned.blit(content, target_rect)
+    return aligned
 
 
 def fit_image(surface: pygame.Surface) -> pygame.Surface:
